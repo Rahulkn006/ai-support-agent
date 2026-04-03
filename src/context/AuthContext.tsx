@@ -101,6 +101,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithGoogle = async () => {
+    if (process.env.NODE_ENV === "development") {
+      setUser({
+        uid: "test-user",
+        email: "test@example.com",
+        displayName: "Test User",
+        photoURL: "",
+        getIdToken: async () => "mock-token",
+      } as any);
+      return;
+    }
     const provider = new GoogleAuthProvider();
     try {
       // Try popup first (works on most browsers)
@@ -121,6 +131,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
+      if (process.env.NODE_ENV === "development") {
+        setUser(null);
+        return;
+      }
       await firebaseSignOut(auth);
     } catch (error) {
       console.error("Sign out failed", error);
