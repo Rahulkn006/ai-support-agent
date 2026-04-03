@@ -1,10 +1,8 @@
-import { extractText } from "unpdf";
-
 /**
  * Extracts text from a File object (PDF or TXT).
  * Strategy:
- *  1. For text-based PDFs: use `unpdf` (pdfjs-based, serverless safe)
- *  2. If text is empty (scanned/image PDF): fall back to Groq Vision OCR
+ *  1. Engine 1: unpdf (pdfjs-based, designed for serverless)
+ *  2. Engine 2: pdf-parse v1 (classic Node.js fallback)
  *  3. For TXT files: read buffer directly
  */
 export async function extractTextFromFile(file: File): Promise<string> {
@@ -12,73 +10,41 @@ export async function extractTextFromFile(file: File): Promise<string> {
   const buffer = Buffer.from(arrayBuffer);
 
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
-    // --- Engine 1: unpdf (handles text-based PDFs perfectly on Vercel) ---
     let extractedText = "";
+
+    // --- Engine 1: unpdf ---
     try {
+      const { extractText } = await import("unpdf");
       const uint8Array = new Uint8Array(buffer);
-      const { text } = await extractText(uint8Array, { mergePages: true });
+      const result = await extractText(uint8Array, { mergePages: true });
+      const text = result.text;
       extractedText = (Array.isArray(text) ? text.join("\n\n") : text || "")
         .replace(/\n{3,}/g, "\n\n")
         .trim();
-      console.log(`unpdf extracted ${extractedText.length} characters.`);
-    } catch (err) {
-      console.error("unpdf failed:", err);
+      console.log(`[Engine 1 - unpdf] Extracted ${extractedText.length} chars`);
+    } catch (err: any) {
+      console.error("[Engine 1 - unpdf] Failed:", err.message || err);
     }
 
-    // --- Engine 2: Groq Vision OCR (fallback for scanned/image PDFs) ---
-    if (extractedText.length < 100) {
-      console.log("Text too short, trying Groq Vision OCR fallback...");
+    // --- Engine 2: pdf-parse (fallback) ---
+    if (extractedText.length < 50) {
       try {
-        const base64 = buffer.toString("base64");
-        const dataUrl = `data:application/pdf;base64,${base64}`;
-
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${process.env.GROQ_API_KEY}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            model: "meta-llama/llama-4-scout-17b-16e-instruct",
-            messages: [
-              {
-                role: "user",
-                content: [
-                  {
-                    type: "text",
-                    text: "This is a scanned PDF document. Please transcribe ALL the text content from this document exactly as it appears. Include all questions, answers, numbers, headings, and content. Output only the transcribed text, nothing else.",
-                  },
-                  {
-                    type: "image_url",
-                    image_url: { url: dataUrl },
-                  },
-                ],
-              },
-            ],
-            max_tokens: 8000,
-            temperature: 0,
-          }),
-        });
-
-        if (response.ok) {
-          const result = await response.json();
-          const ocrText = result.choices?.[0]?.message?.content || "";
-          if (ocrText.length > 50) {
-            console.log(`Groq Vision OCR extracted ${ocrText.length} characters.`);
-            extractedText = ocrText;
-          }
-        } else {
-          const errBody = await response.text();
-          console.error("Groq Vision OCR error response:", errBody);
+        // Dynamic import to avoid pdf-parse's test-mode initialization issue
+        const pdfParse = (await import("pdf-parse")).default;
+        const data = await pdfParse(buffer);
+        const fallbackText = (data.text || "").replace(/\n{3,}/g, "\n\n").trim();
+        console.log(`[Engine 2 - pdf-parse] Extracted ${fallbackText.length} chars`);
+        if (fallbackText.length > extractedText.length) {
+          extractedText = fallbackText;
         }
-      } catch (ocrErr) {
-        console.error("Groq Vision OCR failed:", ocrErr);
+      } catch (err: any) {
+        console.error("[Engine 2 - pdf-parse] Failed:", err.message || err);
       }
     }
 
     if (extractedText.length < 20) {
       throw new Error(
-        "Could not extract text from this PDF. It may be password-protected or corrupted."
+        "This PDF appears to be a scanned image or is empty. Please upload a text-based PDF, or convert your scanned document to a text PDF using a free online OCR tool first."
       );
     }
 

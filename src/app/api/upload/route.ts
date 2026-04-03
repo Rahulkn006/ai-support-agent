@@ -4,6 +4,9 @@ import { extractTextFromFile } from "@/lib/parser";
 import { chunkText } from "@/lib/chunker";
 import { addChunksToUpstash } from "@/lib/upstash";
 
+// Allow up to 60s for PDF processing on Vercel
+export const maxDuration = 60;
+
 async function getAuthenticatedUser(req: NextRequest) {
   const authHeader = req.headers.get("Authorization");
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
