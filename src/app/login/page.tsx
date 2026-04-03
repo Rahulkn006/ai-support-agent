@@ -1,16 +1,32 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { LogIn, FileText, Zap, Shield } from "lucide-react";
+import { LogIn, FileText, Zap, Shield, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const { signInWithGoogle } = useAuth();
+  const { user, loading, signInWithGoogle } = useAuth();
   const router = useRouter();
+
+  // Auto-redirect if already authenticated (handles mobile redirect return)
+  useEffect(() => {
+    if (!loading && user) {
+      router.replace("/dashboard");
+    }
+  }, [user, loading, router]);
+
+  // Show a loading spinner while Firebase resolves auth state
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-950">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      </div>
+    );
+  }
 
   const handleGoogleLogin = async () => {
     setIsLoading(true);

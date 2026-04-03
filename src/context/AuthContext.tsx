@@ -1,7 +1,7 @@
 "use client";
 
 import React, { createContext, useContext, useEffect, useState } from "react";
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut as firebaseSignOut } from "firebase/auth";
+import { onAuthStateChanged, User, signInWithPopup, signInWithRedirect, getRedirectResult, GoogleAuthProvider, signOut as firebaseSignOut } from "firebase/auth";
 import { auth, db } from "@/lib/firebase/clientApp";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 
@@ -38,10 +38,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (process.env.NODE_ENV === "development") return;
 
+    // Handle redirect result first (for mobile sign-in)
+    getRedirectResult(auth).then(async (result) => {
+      if (result?.user) {
+        console.log("Redirect sign-in successful");
+        try {
+          const userRef = doc(db, "users", result.user.uid);
+          const userSnap = await getDoc(userRef);
+          if (!userSnap.exists()) {
+            await setDoc(userRef, {
+              uid: result.user.uid,
+              email: result.user.email,
+              displayName: result.user.displayName || "",
+              photoURL: result.user.photoURL || "",
+              createdAt: new Date().toISOString(),
+            });
+          }
+        } catch (e) {
+          console.warn("Firestore redirect setup:", e);
+        }
+      }
+    }).catch((e) => {
+      console.warn("Redirect result error:", e);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
       if (currentUser) {
         try {
-          // Automatically create or update user in Firestore
           const userRef = doc(db, "users", currentUser.uid);
           const userSnap = await getDoc(userRef);
           
@@ -56,7 +79,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           }
         } catch (e) {
           console.warn("Firestore offline or permission denied:", e);
-          // Don't crash the app if Firestore is unreachable from the client browser
         }
       }
       setUser(currentUser);
@@ -64,12 +86,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, []);;
 
   const signInWithGoogle = async () => {
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
+      // Use redirect on mobile (popups are often blocked), popup on desktop
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      if (isMobile) {
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
     } catch (error) {
       console.error("Google Sign-in failed", error);
       throw error;
