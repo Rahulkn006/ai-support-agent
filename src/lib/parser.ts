@@ -1,7 +1,7 @@
+import pdfParse from "pdf-parse";
+
 /**
  * Extracts text from a File object (PDF or TXT)
- * Uses pdfjs-dist (bundled with pdf-parse v2) directly since pdf-parse v2
- * no longer provides a simple parse function.
  */
 export async function extractTextFromFile(file: File): Promise<string> {
   const arrayBuffer = await file.arrayBuffer();
@@ -9,28 +9,15 @@ export async function extractTextFromFile(file: File): Promise<string> {
 
   if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
     try {
-      // Dynamically import pdfjs-dist (ships with pdf-parse v2)
-      const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs");
-
-      // Load the PDF document from the buffer
-      const loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(buffer) });
-      const pdfDocument = await loadingTask.promise;
-
-      // Extract text from each page
-      const textParts: string[] = [];
-      for (let i = 1; i <= pdfDocument.numPages; i++) {
-        const page = await pdfDocument.getPage(i);
-        const textContent = await page.getTextContent();
-        const pageText = textContent.items
-          .map((item: any) => item.str)
-          .join(" ");
-        textParts.push(pageText);
+      const data = await pdfParse(buffer);
+      if (!data || !data.text) {
+        throw new Error("Parsed PDF text was empty.");
       }
-
-      return textParts.join("\n\n");
-    } catch (error) {
-      console.error("Error parsing PDF:", error);
-      throw new Error("Failed to parse PDF file.");
+      // Basic cleanup of extracted PDF text to remove excessive empty lines
+      return data.text.replace(/\n{3,}/g, "\n\n").trim();
+    } catch (error: any) {
+      console.error("Error parsing PDF with pdf-parse:", error);
+      throw new Error(`PDF Parse Error: ${error.message || error}`);
     }
   } else if (file.type === "text/plain" || file.name.toLowerCase().endsWith(".txt")) {
     return buffer.toString("utf-8");
