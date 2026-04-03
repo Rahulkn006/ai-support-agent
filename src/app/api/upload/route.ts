@@ -51,14 +51,23 @@ export async function POST(req: NextRequest) {
       createdAt: new Date().toISOString(),
     });
 
-    // 2. Extract Text
-    const text = await extractTextFromFile(file);
-    
+    // 2. Extract Text + Chunk (if this fails, delete the Firestore record)
+    let text: string;
+    try {
+      text = await extractTextFromFile(file);
+    } catch (parseError: any) {
+      // Clean up orphan Firestore record
+      await docRef.delete();
+      console.error("Parse error, cleaned up Firestore record:", parseError.message);
+      return NextResponse.json({ error: parseError.message }, { status: 400 });
+    }
+
     // 3. Chunk Text
-    const chunks = chunkText(text, 1000, 200);
+    const chunks = chunkText(text, 2000, 400);
     
     if (chunks.length === 0) {
-      return NextResponse.json({ error: "No extractable text found in file" }, { status: 400 });
+      await docRef.delete();
+      return NextResponse.json({ error: "No text content could be extracted from this file." }, { status: 400 });
     }
 
     // 4. Store Chunks and Embeddings in Upstash Vector (Cloud)
