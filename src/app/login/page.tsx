@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
-import { LogIn } from "lucide-react";
+import { LogIn, FileText, Zap, Shield } from "lucide-react";
 
 export default function LoginPage() {
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-950 relative overflow-hidden text-white">
+    <div className="min-h-screen py-12 flex flex-col items-center justify-center bg-slate-950 relative overflow-hidden text-white">
       {/* Background Orbs for Premium Feel */}
       <div className="absolute top-0 left-0 w-full h-full overflow-hidden z-0">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-blue-600/20 rounded-full blur-[120px] animate-pulse"></div>
@@ -97,6 +97,38 @@ export default function LoginPage() {
             By continuing, you agree to our Terms of Service and Privacy Policy. 
             No separate account creation is required.
           </p>
+        </div>
+      </motion.div>
+
+      {/* Feature Cards below the login box */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5, delay: 0.2 }}
+        className="relative z-10 w-full max-w-4xl mt-12 grid grid-cols-1 md:grid-cols-3 gap-6 px-4"
+      >
+        <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 p-6 rounded-3xl flex flex-col items-center text-center shadow-lg transition-transform duration-300 hover:-translate-y-1">
+          <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center mb-4 text-blue-400 border border-blue-500/20">
+            <FileText size={22} />
+          </div>
+          <h3 className="text-white font-bold tracking-tight mb-2">Smart Document Q&A</h3>
+          <p className="text-slate-400 text-sm leading-relaxed">Upload multiple PDFs and instantly chat directly with your knowledge base in isolated workspaces.</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 p-6 rounded-3xl flex flex-col items-center text-center shadow-lg transition-transform duration-300 hover:-translate-y-1">
+          <div className="w-12 h-12 bg-indigo-500/10 rounded-2xl flex items-center justify-center mb-4 text-indigo-400 border border-indigo-500/20">
+            <Zap size={22} />
+          </div>
+          <h3 className="text-white font-bold tracking-tight mb-2">Lightning Fast AI</h3>
+          <p className="text-slate-400 text-sm leading-relaxed">Experience zero-lag streaming responses powered by Vercel AI SDK and Groq's high-speed models.</p>
+        </div>
+
+        <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 p-6 rounded-3xl flex flex-col items-center text-center shadow-lg transition-transform duration-300 hover:-translate-y-1">
+          <div className="w-12 h-12 bg-emerald-500/10 rounded-2xl flex items-center justify-center mb-4 text-emerald-400 border border-emerald-500/20">
+            <Shield size={22} />
+          </div>
+          <h3 className="text-white font-bold tracking-tight mb-2">Private & Contextual</h3>
+          <p className="text-slate-400 text-sm leading-relaxed">State-of-the-art vector mapping ensures your AI responses are strictly bounded to your documents.</p>
         </div>
       </motion.div>
     </div>
