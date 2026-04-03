@@ -21,6 +21,24 @@ const AuthContext = createContext<AuthContextType>({
 
 export const useAuth = () => useContext(AuthContext);
 
+async function ensureUserInFirestore(firebaseUser: User) {
+  try {
+    const userRef = doc(db, "users", firebaseUser.uid);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+      await setDoc(userRef, {
+        uid: firebaseUser.uid,
+        email: firebaseUser.email,
+        displayName: firebaseUser.displayName || "",
+        photoURL: firebaseUser.photoURL || "",
+        createdAt: new Date().toISOString(),
+      });
+    }
+  } catch (e) {
+    console.warn("Firestore user setup:", e);
+  }
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(
     process.env.NODE_ENV === "development"
@@ -38,69 +56,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (process.env.NODE_ENV === "development") return;
 
-    // Handle redirect result first (for mobile sign-in)
-    getRedirectResult(auth).then(async (result) => {
-      if (result?.user) {
-        console.log("Redirect sign-in successful");
-        try {
-          const userRef = doc(db, "users", result.user.uid);
-          const userSnap = await getDoc(userRef);
-          if (!userSnap.exists()) {
-            await setDoc(userRef, {
-              uid: result.user.uid,
-              email: result.user.email,
-              displayName: result.user.displayName || "",
-              photoURL: result.user.photoURL || "",
-              createdAt: new Date().toISOString(),
-            });
-          }
-        } catch (e) {
-          console.warn("Firestore redirect setup:", e);
-        }
-      }
-    }).catch((e) => {
-      console.warn("Redirect result error:", e);
-    });
+    let mounted = true;
 
-    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-      if (currentUser) {
-        try {
-          const userRef = doc(db, "users", currentUser.uid);
-          const userSnap = await getDoc(userRef);
-          
-          if (!userSnap.exists()) {
-            await setDoc(userRef, {
-              uid: currentUser.uid,
-              email: currentUser.email,
-              displayName: currentUser.displayName || "",
-              photoURL: currentUser.photoURL || "",
-              createdAt: new Date().toISOString(),
-            });
-          }
-        } catch (e) {
-          console.warn("Firestore offline or permission denied:", e);
+    const initAuth = async () => {
+      // Step 1: Process any pending redirect result FIRST
+      // This ensures the auth state is fully resolved before we check it
+      try {
+        const result = await getRedirectResult(auth);
+        if (result?.user) {
+          console.log("Redirect sign-in successful for:", result.user.email);
+          await ensureUserInFirestore(result.user);
         }
+      } catch (e) {
+        console.warn("Redirect result error:", e);
       }
-      setUser(currentUser);
-      setLoading(false);
-    });
 
-    return () => unsubscribe();
-  }, []);;
+      // Step 2: NOW subscribe to auth state changes
+      // At this point, redirect auth is fully resolved
+      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+        if (!mounted) return;
+        if (currentUser) {
+          await ensureUserInFirestore(currentUser);
+        }
+        setUser(currentUser);
+        setLoading(false);
+      });
+
+      return unsubscribe;
+    };
+
+    let cleanup: (() => void) | undefined;
+    initAuth().then((unsub) => { cleanup = unsub; });
+
+    // Safety: don't show spinner forever if something goes wrong
+    const safetyTimer = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 5000);
+
+    return () => {
+      mounted = false;
+      cleanup?.();
+      clearTimeout(safetyTimer);
+    };
+  }, []);
 
   const signInWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
     try {
-      const provider = new GoogleAuthProvider();
-      // Use redirect on mobile (popups are often blocked), popup on desktop
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isMobile) {
+      // Try popup first (works on most browsers)
+      await signInWithPopup(auth, provider);
+    } catch (error: any) {
+      // If popup blocked or closed, fall back to redirect
+      if (
+        error.code === "auth/popup-blocked" ||
+        error.code === "auth/popup-closed-by-user" ||
+        error.code === "auth/cancelled-popup-request"
+      ) {
         await signInWithRedirect(auth, provider);
       } else {
-        await signInWithPopup(auth, provider);
+        throw error;
       }
-    } catch (error) {
-      console.error("Google Sign-in failed", error);
-      throw error;
     }
   };
 
